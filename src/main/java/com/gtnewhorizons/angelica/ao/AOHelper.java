@@ -54,6 +54,7 @@ public class AOHelper {
                 ((int)(b * 255));
 
             celeritasVertices[i].color = color;
+            celeritasVertices[i].light = ao.lightmap[i];
         }
     }
 }
