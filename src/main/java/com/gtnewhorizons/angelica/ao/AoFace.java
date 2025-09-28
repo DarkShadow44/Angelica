@@ -5,8 +5,7 @@
 
 package com.gtnewhorizons.angelica.ao;
 
-import net.minecraft.client.renderer.block.ModelBlockRenderer;
-import net.minecraft.core.Direction;
+import net.minecraftforge.common.util.ForgeDirection;
 
 /**
  * Establishes the mapping between 3D world coordinates and AO faces.
@@ -19,7 +18,7 @@ enum AoFace {
     WEST,
     EAST;
 
-    public static AoFace fromDirection(Direction direction) {
+    public static AoFace fromDirection(ForgeDirection direction) {
         return switch (direction) {
             case DOWN -> DOWN;
             case UP -> UP;
@@ -27,6 +26,7 @@ enum AoFace {
             case SOUTH -> SOUTH;
             case WEST -> WEST;
             case EAST -> EAST;
+            case UNKNOWN -> throw new RuntimeException();
         };
     }
 
@@ -56,9 +56,9 @@ enum AoFace {
      * They sum to 1.
      *
      * <p>The intent is to match vanilla's interpolation for partial quads,
-     * which it performs in {@link ModelBlockRenderer.AmbientOcclusionRenderStorage#calculate}
-     * using the vert weights in {@link ModelBlockRenderer.AdjacencyInfo},
-     * followed by remapping using {@link ModelBlockRenderer.AmbientVertexRemap}.
+     * which it performs in ModelBlockRenderer.AmbientOcclusionRenderStorage#calculate
+     * using the vert weights in ModelBlockRenderer.AdjacencyInfo,
+     * followed by remapping using ModelBlockRenderer.AmbientVertexRemap.
      * Using the ambient vertex remap makes the lighting dependent on correct vertex ordering,
      * and we don't want that.
      */

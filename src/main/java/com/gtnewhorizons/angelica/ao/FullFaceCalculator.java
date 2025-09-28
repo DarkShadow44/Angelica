@@ -5,12 +5,9 @@
 
 package com.gtnewhorizons.angelica.ao;
 
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.block.ModelBlockRenderer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.level.BlockAndTintGetter;
-import net.minecraft.world.level.block.state.BlockState;
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+import net.minecraft.world.IBlockAccess;
+import net.minecraftforge.common.util.ForgeDirection;
 
 /**
  * Calculates AO for a full cube face.
@@ -21,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * using various interpolation schemes depending on the quad.
  *
  * <p>The logic is mostly contained in {@link #calculateFaceUncached},
- * and derives from vanilla's {@link ModelBlockRenderer.AmbientOcclusionRenderStorage#calculate},
+ * and derives from vanilla's ModelBlockRenderer.AmbientOcclusionRenderStorage#calculate,
  * with a few fixes applied:
  * <ul>
  * <li>Fix vanilla sampling adjacent blocks 2 blocks away instead of 1 block away.</li>
@@ -37,8 +34,8 @@ class FullFaceCalculator {
      */
     private static final boolean DISABLE_LIGHTMAP_BLENDING_FIX = Boolean.getBoolean("neoforge.ao.disableLightmapBlendingFix");
 
-    final BlockPos.MutableBlockPos scratchPos = new BlockPos.MutableBlockPos();
-    private ModelBlockRenderer.Cache cache;
+    final MutableBlockPos scratchPos = new MutableBlockPos();
+    private ModelBlockRendererCache cache;
 
     private final AoCalculatedFace[] aoFaces = new AoCalculatedFace[24];
     {
@@ -48,13 +45,13 @@ class FullFaceCalculator {
     }
     private int calculatedAoFaces = 0;
 
-    void startBlock(ModelBlockRenderer.Cache cache) {
+    void startBlock(ModelBlockRendererCache cache) {
         this.calculatedAoFaces = 0;
         this.cache = cache;
     }
 
-    AoCalculatedFace calculateFace(BlockAndTintGetter level, BlockState renderedState, BlockPos renderedPos, Direction direction, boolean shade, boolean sampleOutside) {
-        int cacheIndex = direction.get3DDataValue();
+    AoCalculatedFace calculateFace(IBlockAccess level, FakeBlockState renderedState, BlockPos renderedPos, ForgeDirection direction, boolean shade, boolean sampleOutside) {
+        int cacheIndex = direction.ordinal();
         if (sampleOutside) {
             cacheIndex += 6;
         }
@@ -79,34 +76,34 @@ class FullFaceCalculator {
      * @param sampleOutside {@code true} to sample the light outside the block, {@code false} to sample the light inside the block.
      *                      In vanilla, this is equivalent to {@code faceCubic}.
      */
-    private void calculateFaceUncached(AoCalculatedFace out, BlockAndTintGetter level, BlockState renderedState, BlockPos renderedPos, Direction direction, boolean shade, boolean sampleOutside) {
-        BlockPos samplePos = sampleOutside ? renderedPos.relative(direction) : renderedPos;
-        ModelBlockRenderer.AdjacencyInfo adjacencyInfo = ModelBlockRenderer.AdjacencyInfo.fromFacing(direction);
-        BlockPos.MutableBlockPos scratchPos = this.scratchPos;
+    private void calculateFaceUncached(AoCalculatedFace out, IBlockAccess level, FakeBlockState renderedState, BlockPos renderedPos, ForgeDirection direction, boolean shade, boolean sampleOutside) {
+        BlockPos samplePos = sampleOutside ? renderedPos.offset(direction) : renderedPos;
+        AdjacencyInfo adjacencyInfo = AdjacencyInfo.fromFacing(direction);
+        MutableBlockPos scratchPos = this.scratchPos;
 
         // Sample light and brightness for each side of the face
         // Also store clear here, whereas vanilla does it later
         // AdjacencyInfo calls them corners, but they are actually sides
         scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[0]);
-        BlockState sideState0 = level.getBlockState(scratchPos);
+        FakeBlockState sideState0 = new FakeBlockState(level, scratchPos);
         int sideLightmap0 = this.cache.getLightColor(sideState0, level, scratchPos);
         float sideBrightness0 = this.cache.getShadeBrightness(sideState0, level, scratchPos);
         boolean sideClear0 = !sideState0.isViewBlocking(level, scratchPos) || sideState0.getLightBlock() == 0;
 
         scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[1]);
-        BlockState sideState1 = level.getBlockState(scratchPos);
+        FakeBlockState sideState1 = new FakeBlockState(level, scratchPos);
         int sideLightmap1 = this.cache.getLightColor(sideState1, level, scratchPos);
         float sideBrightness1 = this.cache.getShadeBrightness(sideState1, level, scratchPos);
         boolean sideClear1 = !sideState1.isViewBlocking(level, scratchPos) || sideState1.getLightBlock() == 0;
 
         scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[2]);
-        BlockState sideState2 = level.getBlockState(scratchPos);
+        FakeBlockState sideState2 = new FakeBlockState(level, scratchPos);
         int sideLightmap2 = this.cache.getLightColor(sideState2, level, scratchPos);
         float sideBrightness2 = this.cache.getShadeBrightness(sideState2, level, scratchPos);
         boolean sideClear2 = !sideState2.isViewBlocking(level, scratchPos) || sideState2.getLightBlock() == 0;
 
         scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[3]);
-        BlockState sideState3 = level.getBlockState(scratchPos);
+        FakeBlockState sideState3 = new FakeBlockState(level, scratchPos);
         int sideLightmap3 = this.cache.getLightColor(sideState3, level, scratchPos);
         float sideBrightness3 = this.cache.getShadeBrightness(sideState3, level, scratchPos);
         boolean sideClear3 = !sideState3.isViewBlocking(level, scratchPos) || sideState3.getLightBlock() == 0;
@@ -123,7 +120,7 @@ class FullFaceCalculator {
             cornerClear0 = false;
         } else {
             scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[0]).move(adjacencyInfo.corners[2]);
-            BlockState cornerState0 = level.getBlockState(scratchPos);
+            FakeBlockState cornerState0 = new FakeBlockState(level, scratchPos);
             cornerBrightness0 = this.cache.getShadeBrightness(cornerState0, level, scratchPos);
             cornerLightmap0 = this.cache.getLightColor(cornerState0, level, scratchPos);
             cornerClear0 = !cornerState0.isViewBlocking(level, scratchPos) || cornerState0.getLightBlock() == 0;
@@ -138,7 +135,7 @@ class FullFaceCalculator {
             cornerClear1 = false;
         } else {
             scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[0]).move(adjacencyInfo.corners[3]);
-            BlockState cornerState1 = level.getBlockState(scratchPos);
+            FakeBlockState cornerState1 = new FakeBlockState(level, scratchPos);
             cornerBrightness1 = this.cache.getShadeBrightness(cornerState1, level, scratchPos);
             cornerLightmap1 = this.cache.getLightColor(cornerState1, level, scratchPos);
             cornerClear1 = !cornerState1.isViewBlocking(level, scratchPos) || cornerState1.getLightBlock() == 0;
@@ -154,7 +151,7 @@ class FullFaceCalculator {
             cornerClear2 = false;
         } else {
             scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[1]).move(adjacencyInfo.corners[2]);
-            BlockState cornerState2 = level.getBlockState(scratchPos);
+            FakeBlockState cornerState2 = new FakeBlockState(level, scratchPos);
             cornerBrightness2 = this.cache.getShadeBrightness(cornerState2, level, scratchPos);
             cornerLightmap2 = this.cache.getLightColor(cornerState2, level, scratchPos);
             cornerClear2 = !cornerState2.isViewBlocking(level, scratchPos) || cornerState2.getLightBlock() == 0;
@@ -170,7 +167,7 @@ class FullFaceCalculator {
             cornerClear3 = false;
         } else {
             scratchPos.setWithOffset(samplePos, adjacencyInfo.corners[1]).move(adjacencyInfo.corners[3]);
-            BlockState cornerState3 = level.getBlockState(scratchPos);
+            FakeBlockState cornerState3 = new FakeBlockState(level, scratchPos);
             cornerBrightness3 = this.cache.getShadeBrightness(cornerState3, level, scratchPos);
             cornerLightmap3 = this.cache.getLightColor(cornerState3, level, scratchPos);
             cornerClear3 = !cornerState3.isViewBlocking(level, scratchPos) || cornerState3.getLightBlock() == 0;
@@ -180,13 +177,13 @@ class FullFaceCalculator {
         // This here is changed compare to vanilla which would use the offset position if
         // sampleOutside || !outsideState.isSolidRender
         // which causes seams e.g. when a slab is placed below an active sculk sensor
-        BlockState insideState = sampleOutside ? level.getBlockState(samplePos) : renderedState;
+        FakeBlockState insideState = sampleOutside ? new FakeBlockState(level, samplePos) : renderedState;
         float insideBrightness = this.cache.getShadeBrightness(insideState, level, samplePos);
         int insideLightmap = this.cache.getLightColor(insideState, level, samplePos);
         boolean insideClear = !insideState.isViewBlocking(level, samplePos) || insideState.getLightBlock() == 0;
 
         // Wrap up
-        float levelBrightness = level.getShade(direction, shade);
+        float levelBrightness = Level.getShade(direction, shade);
 
         out.brightness0 = ((sideBrightness3 + sideBrightness0 + cornerBrightness1 + insideBrightness) * 0.25F) * levelBrightness;
         out.brightness1 = ((sideBrightness2 + sideBrightness0 + cornerBrightness0 + insideBrightness) * 0.25F) * levelBrightness;

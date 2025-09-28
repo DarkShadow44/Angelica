@@ -5,20 +5,11 @@
 
 package com.gtnewhorizons.angelica.ao;
 
-
-import com.mojang.logging.LogUtils;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.block.ModelBlockRenderer;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.util.Mth;
-import net.minecraft.world.level.BlockAndTintGetter;
-import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.client.ClientHooks;
-import net.neoforged.neoforge.client.config.NeoForgeClientConfig;
-import net.neoforged.neoforge.client.model.IQuadTransformer;
-import org.slf4j.Logger;
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+import cpw.mods.fml.common.FMLLog;
+import net.minecraft.world.IBlockAccess;
+import net.minecraftforge.common.util.ForgeDirection;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Entrypoint and main class of our enhanced AO pipeline.
@@ -30,56 +21,36 @@ import org.slf4j.Logger;
  *
  * <p>Compared to vanilla, we also remove any assumption about vertex order in the quad.
  */
-public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusionRenderStorage {
-    public static ModelBlockRenderer.AmbientOcclusionRenderStorage newInstance() {
-        if (NeoForgeClientConfig.INSTANCE.enhancedLighting.getAsBoolean()) {
-            return new EnhancedAoRenderStorage();
-        } else {
-            return new ModelBlockRenderer.AmbientOcclusionRenderStorage();
-        }
-    }
+public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
 
     /**
      * "Enhanced" flat shading logic.
      */
-    public static void applyFlatQuadBrightness(BlockAndTintGetter level, BakedQuad quad, ModelBlockRenderer.CommonRenderStorage storage) {
-        if (NeoForgeClientConfig.INSTANCE.enhancedLighting.getAsBoolean()) {
-            int quadNormal = -1;
+    public static void applyFlatQuadBrightness(IBlockAccess level, BakedQuad quad, AmbientOcclusionRenderStorage storage) {
+        int quadNormal = -1;
 
-            for (int vertex = 0; vertex < 4; ++vertex) {
-                // Handle each vertex separately to apply vertex normals.
+        for (int vertex = 0; vertex < 4; ++vertex) {
+            // Handle each vertex separately to apply vertex normals.
 
-                int normal = quad.vertices()[IQuadTransformer.STRIDE * vertex + IQuadTransformer.NORMAL];
-                // The ignored byte is padding and may be filled with user data
-                if ((normal & 0x00FFFFFF) == 0) {
-                    // No normal! Try to use the quad normal.
-                    if (quadNormal == -1) {
-                        quadNormal = ClientHooks.computeQuadNormal(quad.vertices());
-                    }
-                    normal = quadNormal;
+            int normal = quad.vertices()[IQuadTransformer.STRIDE * vertex + IQuadTransformer.NORMAL];
+            // The ignored byte is padding and may be filled with user data
+            if ((normal & 0x00FFFFFF) == 0) {
+                // No normal! Try to use the quad normal.
+                if (quadNormal == -1) {
+                    quadNormal = ClientHooks.computeQuadNormal(quad.vertices());
                 }
-
-                storage.brightness[vertex] = level.getShade(
-                    normalComponent(normal, 0),
-                    normalComponent(normal, 1),
-                    normalComponent(normal, 2),
-                    quad.shade());
+                normal = quadNormal;
             }
-        } else {
-            float f = level.getShade(quad.direction(), quad.shade());
-            storage.brightness[0] = f;
-            storage.brightness[1] = f;
-            storage.brightness[2] = f;
-            storage.brightness[3] = f;
+
+            storage.brightness[vertex] = Level.getShade(
+                normalComponent(normal, 0),
+                normalComponent(normal, 1),
+                normalComponent(normal, 2),
+                quad.shade());
         }
     }
 
-    /**
-     * Debug option to compare the emulated vanilla AO with the actual vanilla AO.
-     * Only does something if emulated AO is enabled.
-     */
-    private static final boolean COMPARE_WITH_VANILLA = Boolean.getBoolean("neoforge.ao.compareWithVanilla");
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = FMLLog.getLogger();
 
     /**
      * Cache these objects so that they don't need to be reallocated for every {@link EnhancedAoRenderStorage}.
@@ -99,12 +70,15 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
 
     private BakedQuad currentQuad;
 
+    protected static final ThreadLocal<AmbientOcclusionRenderStorage> CACHE = ThreadLocal.withInitial(AmbientOcclusionRenderStorage::new);
+
     public EnhancedAoRenderStorage() {
         var cache = AO_OBJECT_CACHE.get();
         this.calculator = cache.calculator;
         this.weights = cache.weights;
         // Reset AO Face cache
-        this.calculator.startBlock(this.cache);
+
+        this.calculator.startBlock(CACHE.get();
     }
 
     @Override
@@ -113,7 +87,7 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
     }
 
     @Override
-    public void calculate(BlockAndTintGetter level, BlockState state, BlockPos pos, Direction direction, boolean shade) {
+    public void calculate(IBlockAccess level, FakeBlockState state, BlockPos pos, ForgeDirection direction, boolean shade) {
         if (this.currentQuad == null) {
             throw new IllegalStateException("Make sure to pass the quad via captureQuad before calling calculate.");
         }
@@ -121,9 +95,9 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
         // Enhanced calculation
         // Vanilla uses ==. We could add an epsilon to use the cheaper axis-aligned logic for almost axis-aligned faces.
         boolean isAxisAligned = switch (direction) {
-            case DOWN, UP -> faceShape[ModelBlockRenderer.SizeInfo.DOWN.index] == faceShape[ModelBlockRenderer.SizeInfo.UP.index];
-            case NORTH, SOUTH -> faceShape[ModelBlockRenderer.SizeInfo.NORTH.index] == faceShape[ModelBlockRenderer.SizeInfo.SOUTH.index];
-            case WEST, EAST -> faceShape[ModelBlockRenderer.SizeInfo.WEST.index] == faceShape[ModelBlockRenderer.SizeInfo.EAST.index];
+            case DOWN, UP -> faceShape[SizeInfo.DOWN.index] == faceShape[SizeInfo.UP.index];
+            case NORTH, SOUTH -> faceShape[SizeInfo.NORTH.index] == faceShape[SizeInfo.SOUTH.index];
+            case WEST, EAST -> faceShape[SizeInfo.WEST.index] == faceShape[SizeInfo.EAST.index];
         };
 
         if (isAxisAligned) {
@@ -139,7 +113,7 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
      * <p>This is similar to vanilla in how we select whether to use the inside or outside light.
      * However, we still use our own interpolation logic which does not make any assumption about vertex winding order.
      */
-    private void calculateAxisAligned(BlockAndTintGetter level, BlockState state, BlockPos pos, Direction direction, boolean shade) {
+    private void calculateAxisAligned(IBlockAccess level, FakeBlockState state, BlockPos pos, ForgeDirection direction, boolean shade) {
         // Same logic as vanilla: sample outside if the depth is small, or force outside if we are a full block.
         // This is already stored in the faceCubic field.
         var fullFace = this.calculator.calculateFace(level, state, pos, direction, shade, this.faceCubic);
@@ -154,30 +128,6 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
             brightness[vertex] = interpolateBrightness(fullFace, weights);
             lightmap[vertex] = interpolateLightmap(fullFace, weights);
         }
-
-        // Debug option to compare emulated vanilla AO with actual vanilla AO.
-        // Since we make changes compared to vanilla's AO, many quads will trigger the warning.
-        if (COMPARE_WITH_VANILLA) {
-            // This is a debug option, so allocations are fine
-            float[] emulatedBrightness = brightness.clone();
-            int[] emulatedLightmap = lightmap.clone();
-
-            super.calculate(level, state, pos, direction, shade);
-
-            for (int vertex = 0; vertex < 4; ++vertex) {
-                if (!Mth.equal(emulatedBrightness[vertex], brightness[vertex]) || emulatedLightmap[vertex] != lightmap[vertex]) {
-                    LOGGER.warn("Emulated vanilla AO differs from actual AO at vertex {} of face {}, while lighting {}@{}\n"
-                            + "Vanilla: lightmap = {}, brightness = {}\n"
-                            + "Emulated: lightmap = {}, brightness = {}\n",
-                        vertex, direction, state.getBlock(), pos, lightmap[vertex], brightness[vertex], emulatedLightmap[vertex], emulatedBrightness[vertex]);
-                    break;
-                }
-            }
-
-            // Revert to our AO
-            System.arraycopy(emulatedBrightness, 0, brightness, 0, 4);
-            System.arraycopy(emulatedLightmap, 0, lightmap, 0, 4);
-        }
     }
 
     private static final float AO_EPS = 1e-4f;
@@ -188,7 +138,7 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
      * Computes AO for a general quad.
      * Projects onto each axis, computes the AO, then combines proportionally to the square of each normal component.
      */
-    private void calculateIrregular(BlockAndTintGetter level, BlockState state, BlockPos pos, boolean shade) {
+    private void calculateIrregular(IBlockAccess level, FakeBlockState state, BlockPos pos, boolean shade) {
         int[] vertices = currentQuad.vertices();
         int quadNormal = -1;
 
@@ -217,10 +167,10 @@ public class EnhancedAoRenderStorage extends ModelBlockRenderer.AmbientOcclusion
                 }
 
                 // Choose AO face based on normal sign
-                Direction direction = switch (axis) {
-                    case 0 -> normalComponent > 0 ? Direction.EAST : Direction.WEST;
-                    case 1 -> normalComponent > 0 ? Direction.UP : Direction.DOWN;
-                    case 2 -> normalComponent > 0 ? Direction.SOUTH : Direction.NORTH;
+                ForgeDirection direction = switch (axis) {
+                    case 0 -> normalComponent > 0 ? ForgeDirection.EAST : ForgeDirection.WEST;
+                    case 1 -> normalComponent > 0 ? ForgeDirection.UP : ForgeDirection.DOWN;
+                    case 2 -> normalComponent > 0 ? ForgeDirection.SOUTH : ForgeDirection.NORTH;
                     default -> throw new AssertionError();
                 };
 
