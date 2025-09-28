@@ -1,9 +1,12 @@
 package org.taumc.celeritas.impl.render.terrain.compile;
 
+import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
+import com.gtnewhorizons.angelica.ao.AOHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.IBlockAccess;
 import org.embeddedt.embeddium.impl.model.quad.properties.ModelQuadFacing;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildBuffers;
@@ -43,7 +46,7 @@ public class ArchaicChunkBuildContext extends ChunkBuildContext {
         return material;
     }
 
-    public void copyRawBuffer(int[] rawBuffer, int vertexCount, ChunkBuildBuffers buffers, Material material) {
+    public void copyRawBuffer(IBlockAccess world, BlockPos pos, int[] rawBuffer, int vertexCount, ChunkBuildBuffers buffers, Material material) {
         if (vertexCount == 0) {
             return;
         }
@@ -80,7 +83,9 @@ public class ArchaicChunkBuildContext extends ChunkBuildContext {
             for (int vIdx = 0; vIdx < 4; vIdx++) {
                 celeritasVertices[vIdx].trueNormal = trueNormal;
             }
+
             ModelQuadFacing facing = QuadUtil.findNormalFace(trueNormal);
+            AOHelper.updateAO(celeritasVertices, world, pos, facing);
             TextureAtlasSprite sprite = this.textureAtlas.celeritas$findFromUV(uSum * 0.25f, vSum * 0.25f);
             if (sprite != null && sprite.hasAnimationMetadata()) {
                 animatedSpritesList.add(sprite);

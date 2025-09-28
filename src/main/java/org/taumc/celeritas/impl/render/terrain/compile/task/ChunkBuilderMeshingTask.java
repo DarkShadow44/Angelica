@@ -132,7 +132,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                                 setForgeRenderPass(pass);
                                 tesselator.startDrawingQuads();
                                 renderBlocks.renderBlockByRenderType(block, x, y, z);
-                                buildContext.copyRawBuffer(extTesselator.celeritas$getRawBuffer(), extTesselator.celeritas$getVertexCount(), buffers, buffers.getRenderPassConfiguration().getMaterialForRenderType(pass));
+                                buildContext.copyRawBuffer(world, new BlockPos(x, y, z), extTesselator.celeritas$getRawBuffer(), extTesselator.celeritas$getVertexCount(), buffers, buffers.getRenderPassConfiguration().getMaterialForRenderType(pass));
                                 extTesselator.celeritas$reset();
                             }
                         }

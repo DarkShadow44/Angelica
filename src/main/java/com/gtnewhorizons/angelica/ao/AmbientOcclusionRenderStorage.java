@@ -17,7 +17,7 @@ public class AmbientOcclusionRenderStorage {
         return i << 16 | j;
     }
 
-    public void calculateShape(IBlockAccess level, FakeBlockState state, BlockPos pos, int[] vertices, ForgeDirection direction) {
+    public void calculateShape(IBlockAccess level, FakeBlockState state, BlockPos pos, float[] vertices, ForgeDirection direction) {
         float f = 32.0F;
         float f1 = 32.0F;
         float f2 = 32.0F;
@@ -26,9 +26,9 @@ public class AmbientOcclusionRenderStorage {
         float f5 = -32.0F;
 
         for(int i = 0; i < 4; ++i) {
-            float f6 = Float.intBitsToFloat(vertices[i * 8]);
-            float f7 = Float.intBitsToFloat(vertices[i * 8 + 1]);
-            float f8 = Float.intBitsToFloat(vertices[i * 8 + 2]);
+            float f6 = vertices[i*3];
+            float f7 = vertices[i*3 + 1];
+            float f8 = vertices[i*3 + 2];
             f = Math.min(f, f6);
             f1 = Math.min(f1, f7);
             f2 = Math.min(f2, f8);

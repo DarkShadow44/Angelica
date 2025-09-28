@@ -6,10 +6,8 @@
 package com.gtnewhorizons.angelica.ao;
 
 import com.gtnewhorizon.gtnhlib.blockpos.BlockPos;
-import cpw.mods.fml.common.FMLLog;
 import net.minecraft.world.IBlockAccess;
 import net.minecraftforge.common.util.ForgeDirection;
-import org.apache.logging.log4j.Logger;
 
 /**
  * Entrypoint and main class of our enhanced AO pipeline.
@@ -27,20 +25,10 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
      * "Enhanced" flat shading logic.
      */
     public static void applyFlatQuadBrightness(IBlockAccess level, BakedQuad quad, AmbientOcclusionRenderStorage storage) {
-        int quadNormal = -1;
-
         for (int vertex = 0; vertex < 4; ++vertex) {
             // Handle each vertex separately to apply vertex normals.
 
-            int normal = quad.vertices()[IQuadTransformer.STRIDE * vertex + IQuadTransformer.NORMAL];
-            // The ignored byte is padding and may be filled with user data
-            if ((normal & 0x00FFFFFF) == 0) {
-                // No normal! Try to use the quad normal.
-                if (quadNormal == -1) {
-                    quadNormal = ClientHooks.computeQuadNormal(quad.vertices());
-                }
-                normal = quadNormal;
-            }
+            int normal = ClientHooks.computeQuadNormal(quad.vertices());
 
             storage.brightness[vertex] = Level.getShade(
                 normalComponent(normal, 0),
@@ -49,8 +37,6 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
                 quad.shade());
         }
     }
-
-    private static final Logger LOGGER = FMLLog.getLogger();
 
     /**
      * Cache these objects so that they don't need to be reallocated for every {@link EnhancedAoRenderStorage}.
@@ -70,7 +56,7 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
 
     private BakedQuad currentQuad;
 
-    protected static final ThreadLocal<AmbientOcclusionRenderStorage> CACHE = ThreadLocal.withInitial(AmbientOcclusionRenderStorage::new);
+    protected static final ThreadLocal<ModelBlockRendererCache> CACHE = ThreadLocal.withInitial(ModelBlockRendererCache::new);
 
     public EnhancedAoRenderStorage() {
         var cache = AO_OBJECT_CACHE.get();
@@ -78,15 +64,13 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
         this.weights = cache.weights;
         // Reset AO Face cache
 
-        this.calculator.startBlock(CACHE.get();
+        this.calculator.startBlock(CACHE.get());
     }
 
-    @Override
     public void captureQuad(BakedQuad quad) {
         this.currentQuad = quad;
     }
 
-    @Override
     public void calculate(IBlockAccess level, FakeBlockState state, BlockPos pos, ForgeDirection direction, boolean shade) {
         if (this.currentQuad == null) {
             throw new IllegalStateException("Make sure to pass the quad via captureQuad before calling calculate.");
@@ -98,6 +82,7 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
             case DOWN, UP -> faceShape[SizeInfo.DOWN.index] == faceShape[SizeInfo.UP.index];
             case NORTH, SOUTH -> faceShape[SizeInfo.NORTH.index] == faceShape[SizeInfo.SOUTH.index];
             case WEST, EAST -> faceShape[SizeInfo.WEST.index] == faceShape[SizeInfo.EAST.index];
+            case UNKNOWN -> throw new RuntimeException();
         };
 
         if (isAxisAligned) {
@@ -121,10 +106,10 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
         // Perform bilinear interpolation to map a full AO face to actual vertex brightness and lightmap.
         // This will work regardless of the vertex order or position
         AoFace aoFace = AoFace.fromDirection(direction);
-        int[] vertices = this.currentQuad.vertices();
+        float[] vertices = this.currentQuad.vertices();
         float[] weights = this.weights;
         for (int vertex = 0; vertex < 4; ++vertex) {
-            aoFace.computeCornerWeights(weights, vertexPos(vertices, vertex, 0), vertexPos(vertices, vertex, 1), vertexPos(vertices, vertex, 2));
+            aoFace.computeCornerWeights(weights, vertices[3 * vertex], vertices[3 * vertex + 1], vertices[3 * vertex + 2]);
             brightness[vertex] = interpolateBrightness(fullFace, weights);
             lightmap[vertex] = interpolateLightmap(fullFace, weights);
         }
@@ -139,21 +124,12 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
      * Projects onto each axis, computes the AO, then combines proportionally to the square of each normal component.
      */
     private void calculateIrregular(IBlockAccess level, FakeBlockState state, BlockPos pos, boolean shade) {
-        int[] vertices = currentQuad.vertices();
-        int quadNormal = -1;
+        float[] vertices = currentQuad.vertices();
 
         for (int vertex = 0; vertex < 4; ++vertex) {
             // Handle each vertex separately to apply vertex normals.
 
-            int normal = vertices[IQuadTransformer.STRIDE * vertex + IQuadTransformer.NORMAL];
-            // The ignored byte is padding and may be filled with user data
-            if ((normal & 0x00FFFFFF) == 0) {
-                // No normal! Try to use the quad normal.
-                if (quadNormal == -1) {
-                    quadNormal = ClientHooks.computeQuadNormal(vertices);
-                }
-                normal = quadNormal;
-            }
+            int normal = ClientHooks.computeQuadNormal(vertices);
 
             float weightedBrightness = 0;
             int weightedLightmap = 0;
@@ -176,17 +152,14 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
 
                 // Compute full face
                 AoFace aoFace = AoFace.fromDirection(direction);
-                float depth = aoFace.computeDepth(
-                    vertexPos(vertices, vertex, 0),
-                    vertexPos(vertices, vertex, 1),
-                    vertexPos(vertices, vertex, 2));
+                float depth = aoFace.computeDepth(vertices[3 * vertex], vertices[3 * vertex + 1], vertices[3 * vertex + 2]);
                 // Same logic as vanilla: sample outside if the depth is small, or force outside if we are a full block.
                 boolean sampleOutside = depth < AO_EPS || state.isCollisionShapeFullBlock(level, pos);
                 AoCalculatedFace fullFace = this.calculator.calculateFace(level, state, pos, direction, shade, sampleOutside);
 
                 // Perform bilinear interpolation to map full AO face to this vertex.
                 float[] weights = this.weights;
-                aoFace.computeCornerWeights(weights, vertexPos(vertices, vertex, 0), vertexPos(vertices, vertex, 1), vertexPos(vertices, vertex, 2));
+                aoFace.computeCornerWeights(weights, vertices[3 * vertex], vertices[3 * vertex + 1], vertices[3 * vertex + 2]);
                 float brightness = interpolateBrightness(fullFace, weights);
                 int lightmap = interpolateLightmap(fullFace, weights);
 
@@ -206,17 +179,6 @@ public class EnhancedAoRenderStorage extends AmbientOcclusionRenderStorage {
             brightness[vertex] = Math.clamp(weightedBrightness * AVERAGE_WEIGHT + maxBrightness * MAX_WEIGHT, 0.0F, 1.0F);
             lightmap[vertex] = lerpLightmap(weightedLightmap, AVERAGE_WEIGHT, maxLightmap, MAX_WEIGHT);
         }
-    }
-
-    /**
-     * Extracts the position of a vertex from quad data.
-     *
-     * @param vertices quad data
-     * @param vertex   vertex index, from 0 to 3 included
-     * @param axis     axis index, for 0 to 2 included
-     */
-    private static float vertexPos(int[] vertices, int vertex, int axis) {
-        return Float.intBitsToFloat(vertices[vertex * IQuadTransformer.STRIDE + IQuadTransformer.POSITION + axis]);
     }
 
     /**

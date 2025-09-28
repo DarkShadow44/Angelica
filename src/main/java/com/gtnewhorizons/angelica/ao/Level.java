@@ -24,4 +24,23 @@ public class Level {
             }
         }
     }
+
+    public static ForgeDirection getApproximateNearest(float x, float y, float z) {
+        ForgeDirection direction = ForgeDirection.NORTH;
+        float f = Float.MIN_VALUE;
+
+        for(ForgeDirection direction1 : ForgeDirection.VALID_DIRECTIONS) {
+            float f1 = x * (float)direction1.offsetX + y * (float)direction1.offsetY + z * (float)direction1.offsetZ;
+            if (f1 > f) {
+                f = f1;
+                direction = direction1;
+            }
+        }
+
+        return direction;
+    }
+
+    public static float getShade(float normalX, float normalY, float normalZ, boolean shade) {
+        return getShade(getApproximateNearest(normalX, normalY, normalZ), shade);
+    }
 }
